@@ -612,12 +612,13 @@ function computeLiLvZhai(data) {
         period: ref.period, bond_type: '利率债',
         series: ref.series.map((s, si) => {
           const combined = s.data.map((val, di) => {
-            let sum = (val != null) ? val : 0;
+            let hasData = false, sum = 0;
+            if (val != null) { hasData = true; sum += val; }
             for (let k = 1; k < refCharts.length; k++) {
               const other = refCharts[k][ci].series[si];
-              if (other && other.data[di] != null) sum += other.data[di];
+              if (other && other.data[di] != null) { hasData = true; sum += other.data[di]; }
             }
-            return Math.round(sum * 100) / 100;
+            return hasData ? Math.round(sum * 100) / 100 : null;
           });
           return { name: s.name, data: combined };
         })
