@@ -797,6 +797,15 @@ function getISOWeek(dateStr) {
   return d.getUTCFullYear() + '-W' + String(weekNo).padStart(2, '0');
 }
 
+function getWeekMonday(dateStr) {
+  const d = new Date(dateStr);
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() - dayNum + 1);
+  const m = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  return d.getUTCFullYear() + '-' + String(m).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+}
+
 function getMonthKey(dateStr) {
   return dateStr.substring(0, 7);
 }
@@ -885,7 +894,7 @@ function renderTimeSeries() {
     const weekEnd = adjustToWeekEnd(endDate);
     const weeklyMap = {};
     for (const d of dailyDates) {
-      const wk = getISOWeek(d);
+      const wk = getWeekMonday(d);
       if (!weeklyMap[wk]) weeklyMap[wk] = new Array(8).fill(0);
       const row = dailyMap[d];
       for (let j = 0; j < 8; j++) weeklyMap[wk][j] += (row[j] || 0);
@@ -978,7 +987,7 @@ function renderTimeSeries() {
             splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } },
             axisLine: { show: false }
           },
-          dataZoom: fc.dates.length > 60 ? [{ type: 'inside' }, { type: 'slider', height: 20, bottom: 5 }] : [],
+          dataZoom: [{ type: 'inside' }, { type: 'slider', height: 20, bottom: 5 }],
           series
         });
       }, 50);
