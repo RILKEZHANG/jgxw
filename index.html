@@ -221,6 +221,7 @@ let show10MMA = true;
 
 fetch('data.json?v=' + Date.now()).then(r=>r.json()).then(data=>{
   appData = data;
+  computeLiLvZhai(data);
   selectedBondTypes = [data.bond_types[0]]; // default: 国债
   selectedInstitutions = data.institutions.slice(); // all selected
   
@@ -591,6 +592,74 @@ function updateFilterUI() {
   posSel.querySelector('.all-btn').classList.toggle('active', selectedPeriods.length === appData.positions.length);
 }
 
+function computeLiLvZhai(data) {
+  const sources = ['国债', '政金债', '地方债'];
+  // 1. 季节性图表: charts_by_bond
+  const bondCharts = {};
+  const positions = data.positions;
+  for (const pos of positions) {
+    const chartsForPos = [];
+    const refCharts = [];
+    for (const src of sources) {
+      const c = data.charts_by_bond[src] && data.charts_by_bond[src][pos];
+      if (c) refCharts.push(c);
+    }
+    if (refCharts.length === 0) continue;
+    for (let ci = 0; ci < refCharts[0].length; ci++) {
+      const ref = refCharts[0][ci];
+      const chart = {
+        title: ref.title, institution: ref.institution,
+        period: ref.period, bond_type: '利率债',
+        series: ref.series.map((s, si) => {
+          const combined = s.data.map((val, di) => {
+            let sum = (val != null) ? val : 0;
+            for (let k = 1; k < refCharts.length; k++) {
+              const other = refCharts[k][ci].series[si];
+              if (other && other.data[di] != null) sum += other.data[di];
+            }
+            return Math.round(sum * 100) / 100;
+          });
+          return { name: s.name, data: combined };
+        })
+      };
+      chartsForPos.push(chart);
+    }
+    bondCharts[pos] = chartsForPos;
+  }
+  data.charts_by_bond['利率债'] = bondCharts;
+
+  // 2. 时间序列: raw_table
+  const srcBonds = sources.map(s => data.raw_table[s]).filter(Boolean);
+  if (srcBonds.length > 0) {
+    const allDatesSet = new Set();
+    srcBonds.forEach(b => b.dates.forEach(d => allDatesSet.add(d)));
+    const sortedDates = [...allDatesSet].sort();
+    const terms = {};
+    const allTerms = new Set();
+    srcBonds.forEach(b => Object.keys(b.terms).forEach(t => allTerms.add(t)));
+    for (const term of allTerms) {
+      const values = [];
+      // Pre-build index maps for O(1) lookup
+      const srcMaps = srcBonds.map(b => {
+        const map = {};
+        const termData = b.terms[term];
+        if (termData) b.dates.forEach((d, i) => { if (termData[i]) map[d] = termData[i]; });
+        return map;
+      });
+      for (const date of sortedDates) {
+        const row = new Array(8).fill(0);
+        for (const sm of srcMaps) {
+          const r = sm[date];
+          if (r) for (let j = 0; j < 8; j++) row[j] += (r[j] || 0);
+        }
+        values.push(row);
+      }
+      terms[term] = values;
+    }
+    data.raw_table['利率债'] = { dates: sortedDates, terms: terms };
+  }
+}
+
 function toggle10MMA() {
   show10MMA = document.getElementById('mmaToggle').checked;
   renderCharts(appData);
@@ -744,11 +813,11 @@ function initTimeSeriesPanel(data) {
   document.getElementById('tsEndDate').min = data.all_dates[0];
   document.getElementById('tsEndDate').max = data.all_dates[data.all_dates.length - 1];
 
-  // Bond type selector (use table_bond_types which has 5 types with raw_table data)
-  tsSelectedBonds = [data.table_bond_types[0]];
+  // Bond type selector (use bond_types which includes 利率债 computed on frontend)
+  tsSelectedBonds = [data.bond_types[0]];
   const bondSel = document.getElementById('tsBondSelector');
   bondSel.innerHTML = '<span style="font-size:13px;font-weight:600;color:#333;margin-right:8px;">债券类型：</span>';
-  data.table_bond_types.forEach(bt => {
+  data.bond_types.forEach(bt => {
     const btn = document.createElement('button');
     btn.className = 'filter-btn' + (tsSelectedBonds.includes(bt) ? ' active' : '');
     btn.textContent = bt;
