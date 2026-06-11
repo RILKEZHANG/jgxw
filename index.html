@@ -154,6 +154,7 @@
   <div class="nav-tabs">
     <div class="nav-tab active" data-tab="table" onclick="switchTab('table', this)">分期限统计</div>
     <div class="nav-tab" data-tab="charts" onclick="switchTab('charts', this)">机构净买入季节性图表</div>
+    <div class="nav-tab" data-tab="timeseries" onclick="switchTab('timeseries', this)">时间序列</div>
   </div>
   <div class="content">
     <div id="section-table" class="section active">
@@ -177,6 +178,23 @@
         <button class="date-apply-btn" onclick="applyDateRange()" style="background:linear-gradient(135deg,#fa8c16,#d46b08);">应用</button>
         <span class="date-hint" id="prevDateHint"></span>
       </div>
+    </div>
+    <div id="section-timeseries" class="section">
+      <div class="filter-panel">
+        <div class="date-range-bar" style="box-shadow:none;border:none;padding:0;margin-bottom:12px;">
+          <span class="date-label">起始时间：</span>
+          <input type="date" id="tsStartDate" class="date-input">
+          <span class="date-label" style="margin-left:16px;">结束时间：</span>
+          <input type="date" id="tsEndDate" class="date-input">
+        </div>
+        <div class="filter-row" id="tsBondSelector"></div>
+        <div class="filter-row" id="tsTermSelector"></div>
+        <div style="margin-top:12px;">
+          <button class="date-apply-btn" onclick="renderTimeSeries()">生成图表</button>
+          <span class="date-hint" id="tsHint"></span>
+        </div>
+      </div>
+      <div id="tsChartsArea" style="margin-top:20px;"></div>
     </div>
     <div id="section-charts" class="section">
       <div class="filter-panel" id="filterPanel">
@@ -228,6 +246,7 @@ fetch('data.json?v=' + Date.now()).then(r=>r.json()).then(data=>{
   
   renderFilterPanel(data);
   renderCharts(data);
+  initTimeSeriesPanel(data);
 }).catch(err=>{
   document.querySelector('.content').innerHTML = '<div style="text-align:center;padding:80px;color:#999;font-size:16px;">数据加载失败，请确保 data.json 文件存在<br><small>'+err.message+'</small></div>';
 });
@@ -238,6 +257,7 @@ function switchTab(tab, el) {
   el.classList.add('active');
   document.getElementById('section-'+tab).classList.add('active');
   if(tab==='charts') setTimeout(()=>chartInstances.forEach(c=>c.resize()),150);
+  if(tab==='timeseries') setTimeout(()=>{ if(tsChartInstances.length) tsChartInstances.forEach(c=>c.resize()); },150);
 }
 
 // === Dynamic table computation (SUMIFS equivalent) ===
@@ -708,7 +728,269 @@ function renderCharts(data) {
   }, 80);
 }
 
-window.addEventListener('resize', () => chartInstances.forEach(c => c.resize()));
+
+let tsChartInstances = [];
+let tsSelectedBonds = [];
+let tsSelectedTerms = [];
+
+const instColors = ['#1890ff','#52c41a','#fa8c16','#722ed1','#13c2c2','#eb2f96','#faad14','#2f54eb'];
+
+function initTimeSeriesPanel(data) {
+  // Date pickers
+  document.getElementById('tsStartDate').value = data.all_dates[Math.max(0, data.all_dates.length - 60)];
+  document.getElementById('tsEndDate').value = data.all_dates[data.all_dates.length - 1];
+  document.getElementById('tsStartDate').min = data.all_dates[0];
+  document.getElementById('tsStartDate').max = data.all_dates[data.all_dates.length - 1];
+  document.getElementById('tsEndDate').min = data.all_dates[0];
+  document.getElementById('tsEndDate').max = data.all_dates[data.all_dates.length - 1];
+
+  // Bond type selector (use table_bond_types which has 5 types with raw_table data)
+  tsSelectedBonds = [data.table_bond_types[0]];
+  const bondSel = document.getElementById('tsBondSelector');
+  bondSel.innerHTML = '<span style="font-size:13px;font-weight:600;color:#333;margin-right:8px;">债券类型：</span>';
+  data.table_bond_types.forEach(bt => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (tsSelectedBonds.includes(bt) ? ' active' : '');
+    btn.textContent = bt;
+    btn.onclick = () => {
+      if (tsSelectedBonds.includes(bt)) {
+        if (tsSelectedBonds.length > 1) tsSelectedBonds = tsSelectedBonds.filter(b => b !== bt);
+      } else {
+        tsSelectedBonds.push(bt);
+      }
+      bondSel.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.toggle('active', tsSelectedBonds.includes(b.textContent));
+      });
+    };
+    bondSel.appendChild(btn);
+  });
+
+  // Term selector
+  const tsTerms = ['总','1Y以下','1-3Y','3-5Y','5-7Y','7-10Y','超长'];
+  tsSelectedTerms = ['总'];
+  const termSel = document.getElementById('tsTermSelector');
+  termSel.innerHTML = '<span style="font-size:13px;font-weight:600;color:#333;margin-right:8px;">剩余期限：</span>';
+  tsTerms.forEach(tm => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (tsSelectedTerms.includes(tm) ? ' active' : '');
+    btn.textContent = tm;
+    btn.onclick = () => {
+      if (tsSelectedTerms.includes(tm)) {
+        if (tsSelectedTerms.length > 1) tsSelectedTerms = tsSelectedTerms.filter(t => t !== tm);
+      } else {
+        tsSelectedTerms.push(tm);
+      }
+      termSel.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.toggle('active', tsSelectedTerms.includes(b.textContent));
+      });
+    };
+    termSel.appendChild(btn);
+  });
+}
+
+function getISOWeek(dateStr) {
+  const d = new Date(dateStr);
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return d.getUTCFullYear() + '-W' + String(weekNo).padStart(2, '0');
+}
+
+function getMonthKey(dateStr) {
+  return dateStr.substring(0, 7);
+}
+
+function adjustToWeekStart(dateStr) {
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - diff);
+  return d.toISOString().substring(0, 10);
+}
+
+function adjustToWeekEnd(dateStr) {
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const diff = day === 0 ? 0 : 7 - day;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().substring(0, 10);
+}
+
+function adjustToMonthStart(dateStr) {
+  return dateStr.substring(0, 8) + '01';
+}
+
+function adjustToMonthEnd(dateStr) {
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() + 1, 0);
+  return d.toISOString().substring(0, 10);
+}
+
+function renderTimeSeries() {
+  if (!appData) return;
+  const startDate = document.getElementById('tsStartDate').value;
+  const endDate = document.getElementById('tsEndDate').value;
+  if (!startDate || !endDate) { document.getElementById('tsHint').textContent = '请选择日期范围'; return; }
+  if (startDate > endDate) { document.getElementById('tsHint').textContent = '起始时间不能晚于结束时间'; return; }
+  document.getElementById('tsHint').textContent = '';
+
+  // Destroy old charts
+  tsChartInstances.forEach(c => c.dispose());
+  tsChartInstances = [];
+
+  const area = document.getElementById('tsChartsArea');
+  area.innerHTML = '';
+
+  // Combine selected bond types: sum their raw_table data
+  // For '总' term, sum across all terms; for specific term, use that term
+  const instNames = appData.table_inst_headers;
+
+  for (const term of tsSelectedTerms) {
+    // Build daily data: aggregate across selected bond types
+    const dailyMap = {}; // dateStr -> [8 inst values]
+
+    for (const bt of tsSelectedBonds) {
+      const rawBond = appData.raw_table[bt];
+      if (!rawBond) continue;
+      const dates = rawBond.dates;
+      // For '总', sum across all terms; otherwise use specific term
+      const termsToSum = (term === '总') ? Object.keys(rawBond.terms) : [term];
+
+      for (let i = 0; i < dates.length; i++) {
+        if (dates[i] >= startDate && dates[i] <= endDate) {
+          if (!dailyMap[dates[i]]) dailyMap[dates[i]] = new Array(8).fill(0);
+          for (const t of termsToSum) {
+            const row = rawBond.terms[t];
+            if (row && row[i]) {
+              for (let j = 0; j < 8; j++) dailyMap[dates[i]][j] += (row[i][j] || 0);
+            }
+          }
+        }
+      }
+    }
+
+    const dailyDates = Object.keys(dailyMap).sort();
+    if (dailyDates.length === 0) continue;
+
+    // Create 3 chart containers
+    const freqConfigs = [
+      { key: 'daily', label: '日度', dates: dailyDates, data: dailyMap },
+      { key: 'weekly', label: '周度', dates: null, data: null },
+      { key: 'monthly', label: '月度', dates: null, data: null },
+    ];
+
+    // Weekly aggregation
+    const weekStart = adjustToWeekStart(startDate);
+    const weekEnd = adjustToWeekEnd(endDate);
+    const weeklyMap = {};
+    for (const d of dailyDates) {
+      const wk = getISOWeek(d);
+      if (!weeklyMap[wk]) weeklyMap[wk] = new Array(8).fill(0);
+      const row = dailyMap[d];
+      for (let j = 0; j < 8; j++) weeklyMap[wk][j] += (row[j] || 0);
+    }
+    freqConfigs[1].dates = Object.keys(weeklyMap).sort();
+    freqConfigs[1].data = weeklyMap;
+
+    // Monthly aggregation
+    const monthlyMap = {};
+    for (const d of dailyDates) {
+      const mk = getMonthKey(d);
+      if (!monthlyMap[mk]) monthlyMap[mk] = new Array(8).fill(0);
+      const row = dailyMap[d];
+      for (let j = 0; j < 8; j++) monthlyMap[mk][j] += (row[j] || 0);
+    }
+    freqConfigs[2].dates = Object.keys(monthlyMap).sort();
+    freqConfigs[2].data = monthlyMap;
+
+    const bondLabel = tsSelectedBonds.length === 1 ? tsSelectedBonds[0] : tsSelectedBonds.join('+');
+    const termLabel = term === '总' ? '全部期限' : term;
+
+    for (const fc of freqConfigs) {
+      if (fc.dates.length === 0) continue;
+      const card = document.createElement('div');
+      card.className = 'chart-card';
+      card.style.marginBottom = '20px';
+      const chartId = 'ts-chart-' + term + '-' + fc.key;
+      card.innerHTML = '<h3>' + bondLabel + ' · ' + termLabel + ' · ' + fc.label + '</h3>' +
+        '<div class="chart-container" id="' + chartId + '" style="height:420px;"></div>';
+      area.appendChild(card);
+
+      setTimeout(() => {
+        const el = document.getElementById(chartId);
+        if (!el) return;
+        const inst = echarts.init(el);
+        tsChartInstances.push(inst);
+
+        const series = [];
+        const legendData = [];
+        instNames.forEach((instName, j) => {
+          const vals = fc.dates.map(d => {
+            const row = fc.data[d];
+            return row ? Math.round((row[j] || 0) * 100) / 100 : 0;
+          });
+          series.push({
+            name: instName,
+            type: 'bar',
+            stack: 'total',
+            data: vals,
+            itemStyle: { color: instColors[j] },
+            emphasis: { focus: 'series' }
+          });
+          legendData.push(instName);
+        });
+
+        inst.setOption({
+          tooltip: {
+            trigger: 'axis', backgroundColor: 'rgba(30,30,50,0.92)',
+            borderColor: 'transparent', textStyle: { color: '#fff', fontSize: 12 },
+            formatter(params) {
+              let h = '<b style="color:#ddd">' + params[0].axisValue + '</b><br/>';
+              let total = 0;
+              params.forEach(p => {
+                if (p.value != null && p.value !== 0) {
+                  h += p.marker + ' ' + p.seriesName + ': <b>' + p.value.toFixed(2) + '</b> 亿<br/>';
+                  total += p.value;
+                }
+              });
+              h += '<span style="color:#faad14">合计: <b>' + total.toFixed(2) + '</b> 亿</span>';
+              return h;
+            }
+          },
+          legend: {
+            data: legendData, top: 0,
+            textStyle: { fontSize: 11 }, itemWidth: 16, itemHeight: 10,
+            itemStyle: { borderWidth: 0 }, selectedMode: true
+          },
+          grid: { left: 60, right: 20, top: 40, bottom: 40 },
+          xAxis: {
+            type: 'category', data: fc.dates, boundaryGap: true,
+            axisLabel: {
+              interval: Math.max(0, Math.floor(fc.dates.length / 15)),
+              fontSize: 10, color: '#aaa', rotate: fc.key === 'daily' ? 45 : 0
+            },
+            axisLine: { lineStyle: { color: '#e0e0e0' } }, axisTick: { show: false }
+          },
+          yAxis: {
+            type: 'value', name: '亿元',
+            axisLabel: { fontSize: 10, color: '#aaa', formatter: v => v.toFixed(0) },
+            splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } },
+            axisLine: { show: false }
+          },
+          dataZoom: fc.dates.length > 60 ? [{ type: 'inside' }, { type: 'slider', height: 20, bottom: 5 }] : [],
+          series
+        });
+      }, 50);
+    }
+  }
+
+  if (area.children.length === 0) {
+    area.innerHTML = '<div style="text-align:center;padding:60px;color:#999;">未找到匹配数据，请调整筛选条件</div>';
+  }
+}
+
+window.addEventListener('resize', () => { chartInstances.forEach(c => c.resize()); tsChartInstances.forEach(c => c.resize()); });
 </script>
 </body>
 </html>
