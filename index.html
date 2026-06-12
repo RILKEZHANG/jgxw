@@ -968,26 +968,52 @@ function renderTimeSeries() {
       { key: 'monthly', label: '月度', dates: null, data: null },
     ];
 
-    // Weekly aggregation
+    // Weekly aggregation: expand to full week boundaries
     const weekStart = adjustToWeekStart(startDate);
     const weekEnd = adjustToWeekEnd(endDate);
     const weeklyMap = {};
-    for (const d of dailyDates) {
-      const wk = getWeekMonday(d);
-      if (!weeklyMap[wk]) weeklyMap[wk] = new Array(8).fill(0);
-      const row = dailyMap[d];
-      for (let j = 0; j < 8; j++) weeklyMap[wk][j] += (row[j] || 0);
+    for (const bt of tsSelectedBonds) {
+      const rawBond = appData.raw_table[bt];
+      if (!rawBond) continue;
+      const dates = rawBond.dates;
+      const termsToSum = (term === '总') ? Object.keys(rawBond.terms) : [term];
+      for (let i = 0; i < dates.length; i++) {
+        if (dates[i] >= weekStart && dates[i] <= weekEnd) {
+          const wk = getWeekMonday(dates[i]);
+          if (!weeklyMap[wk]) weeklyMap[wk] = new Array(8).fill(0);
+          for (const t of termsToSum) {
+            const row = rawBond.terms[t];
+            if (row && row[i]) {
+              for (let j = 0; j < 8; j++) weeklyMap[wk][j] += (row[i][j] || 0);
+            }
+          }
+        }
+      }
     }
     freqConfigs[1].dates = Object.keys(weeklyMap).sort();
     freqConfigs[1].data = weeklyMap;
 
-    // Monthly aggregation
+    // Monthly aggregation: expand to full month boundaries
+    const monthStart = adjustToMonthStart(startDate);
+    const monthEnd = adjustToMonthEnd(endDate);
     const monthlyMap = {};
-    for (const d of dailyDates) {
-      const mk = getMonthKey(d);
-      if (!monthlyMap[mk]) monthlyMap[mk] = new Array(8).fill(0);
-      const row = dailyMap[d];
-      for (let j = 0; j < 8; j++) monthlyMap[mk][j] += (row[j] || 0);
+    for (const bt of tsSelectedBonds) {
+      const rawBond = appData.raw_table[bt];
+      if (!rawBond) continue;
+      const dates = rawBond.dates;
+      const termsToSum = (term === '总') ? Object.keys(rawBond.terms) : [term];
+      for (let i = 0; i < dates.length; i++) {
+        if (dates[i] >= monthStart && dates[i] <= monthEnd) {
+          const mk = getMonthKey(dates[i]);
+          if (!monthlyMap[mk]) monthlyMap[mk] = new Array(8).fill(0);
+          for (const t of termsToSum) {
+            const row = rawBond.terms[t];
+            if (row && row[i]) {
+              for (let j = 0; j < 8; j++) monthlyMap[mk][j] += (row[i][j] || 0);
+            }
+          }
+        }
+      }
     }
     freqConfigs[2].dates = Object.keys(monthlyMap).sort();
     freqConfigs[2].data = monthlyMap;
