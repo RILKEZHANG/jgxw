@@ -670,7 +670,10 @@ function compute10MMA(data) {
   const result = [];
   const window = 10;
   for (let i = 0; i < data.length; i++) {
-    if (i < window - 1) { result.push(null); continue; }
+    if (i < window - 1 || data[i] === null || data[i] === undefined) {
+      result.push(null);
+      continue;
+    }
     let sum = 0, count = 0;
     for (let j = i - window + 1; j <= i; j++) {
       if (data[j] !== null && data[j] !== undefined) {
