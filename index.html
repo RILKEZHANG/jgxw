@@ -154,6 +154,7 @@
   <div class="nav-tabs">
     <div class="nav-tab active" data-tab="table" onclick="switchTab('table', this)">分期限统计</div>
     <div class="nav-tab" data-tab="charts" onclick="switchTab('charts', this)">机构净买入季节性图表</div>
+    <div class="nav-tab" data-tab="cumcharts" onclick="switchTab('cumcharts', this)">机构累计净买入季节性图表</div>
     <div class="nav-tab" data-tab="timeseries" onclick="switchTab('timeseries', this)">时间序列</div>
   </div>
   <div class="content">
@@ -208,6 +209,15 @@
       </div>
       <div class="charts-grid" id="chartsGrid"></div>
     </div>
+    <div id="section-cumcharts" class="section">
+      <div class="filter-panel" id="cumFilterPanel">
+        <div class="filter-row" id="cumBondSelector"></div>
+        <div class="filter-row" id="cumInstSelector"></div>
+        <div class="filter-row" id="cumTermSelector"></div>
+        <div style="margin-top:10px;font-size:12px;color:#999;" id="cumChartCount"></div>
+      </div>
+      <div class="charts-grid" id="cumChartsGrid"></div>
+    </div>
   </div>
 
 <script>
@@ -246,6 +256,8 @@ fetch('data.json?v=' + Date.now()).then(r=>r.json()).then(data=>{
   
   renderFilterPanel(data);
   renderCharts(data);
+  initCumChartsPanel(data);
+  renderCumCharts(data);
   initTimeSeriesPanel(data);
   renderTimeSeries();
 }).catch(err=>{
@@ -258,6 +270,7 @@ function switchTab(tab, el) {
   el.classList.add('active');
   document.getElementById('section-'+tab).classList.add('active');
   if(tab==='charts') setTimeout(()=>chartInstances.forEach(c=>c.resize()),150);
+  if(tab==='cumcharts') setTimeout(()=>cumChartInstances.forEach(c=>c.resize()),150);
   if(tab==='timeseries') setTimeout(()=>{ if(tsChartInstances.length) tsChartInstances.forEach(c=>c.resize()); },150);
 }
 
@@ -792,6 +805,255 @@ function renderCharts(data) {
         yAxis: {
           type: 'value',
           axisLabel: { fontSize: 10, color: '#aaa', formatter: v => v.toFixed(0) },
+          splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } },
+          axisLine: { show: false }
+        },
+        series
+      });
+    });
+  }, 80);
+}
+
+
+// ========== 机构累计净买入季节性图表 ==========
+let cumChartInstances = [];
+let cumSelectedBonds = [];
+let cumSelectedInstitutions = [];
+let cumSelectedTerms = [];
+
+function initCumChartsPanel(data) {
+  // Bond type selector
+  cumSelectedBonds = [data.bond_types[0]];
+  const bondSel = document.getElementById('cumBondSelector');
+  bondSel.innerHTML = '<span class="selector-label">债券类型：</span>';
+  const allBondBtn = document.createElement('button');
+  allBondBtn.className = 'filter-btn all-btn';
+  allBondBtn.textContent = '全选';
+  allBondBtn.onclick = () => cumToggleAll('bond');
+  bondSel.appendChild(allBondBtn);
+  data.bond_types.forEach(bt => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (cumSelectedBonds.includes(bt) ? ' active' : '');
+    btn.textContent = bt;
+    btn.onclick = () => cumToggleFilter('bond', bt);
+    bondSel.appendChild(btn);
+  });
+
+  // Institution selector
+  cumSelectedInstitutions = data.institutions.slice();
+  const instSel = document.getElementById('cumInstSelector');
+  instSel.innerHTML = '<span class="selector-label">机构类型：</span>';
+  const allInstBtn = document.createElement('button');
+  allInstBtn.className = 'filter-btn all-btn active';
+  allInstBtn.textContent = '全选';
+  allInstBtn.onclick = () => cumToggleAll('inst');
+  instSel.appendChild(allInstBtn);
+  data.institutions.forEach(inst => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn active';
+    btn.textContent = inst;
+    if (inst === '其他') btn.title = '其他主要包括：券商资管、年金、养老金、社保、保险资管、财务公司、信托等';
+    btn.onclick = () => cumToggleFilter('inst', inst);
+    instSel.appendChild(btn);
+  });
+
+  // Term selector
+  cumSelectedTerms = ['总'];
+  const termSel = document.getElementById('cumTermSelector');
+  termSel.innerHTML = '<span class="selector-label">剩余期限：</span>';
+  const allTermBtn = document.createElement('button');
+  allTermBtn.className = 'filter-btn all-btn';
+  allTermBtn.textContent = '全选';
+  allTermBtn.onclick = () => cumToggleAll('term');
+  termSel.appendChild(allTermBtn);
+  data.positions.forEach(pos => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (cumSelectedTerms.includes(pos) ? ' active' : '');
+    btn.textContent = pos === '总' ? '总计' : pos;
+    btn.onclick = () => cumToggleFilter('term', pos);
+    termSel.appendChild(btn);
+  });
+}
+
+function cumToggleFilter(type, value) {
+  let arr;
+  if (type === 'bond') arr = cumSelectedBonds;
+  else if (type === 'inst') arr = cumSelectedInstitutions;
+  else arr = cumSelectedTerms;
+  const idx = arr.indexOf(value);
+  if (idx >= 0) { if (arr.length <= 1) return; arr.splice(idx, 1); }
+  else arr.push(value);
+  cumUpdateFilterUI();
+  renderCumCharts(appData);
+}
+
+function cumToggleAll(type) {
+  if (type === 'bond') cumSelectedBonds = appData.bond_types.slice();
+  else if (type === 'inst') cumSelectedInstitutions = appData.institutions.slice();
+  else cumSelectedTerms = appData.positions.slice();
+  cumUpdateFilterUI();
+  renderCumCharts(appData);
+}
+
+function cumUpdateFilterUI() {
+  const bondSel = document.getElementById('cumBondSelector');
+  bondSel.querySelectorAll('.filter-btn:not(.all-btn)').forEach(b => {
+    b.classList.toggle('active', cumSelectedBonds.includes(b.textContent));
+  });
+  const allBondBtn = bondSel.querySelector('.all-btn');
+  if (allBondBtn) allBondBtn.classList.toggle('active', cumSelectedBonds.length === appData.bond_types.length);
+
+  const instSel = document.getElementById('cumInstSelector');
+  instSel.querySelectorAll('.filter-btn:not(.all-btn)').forEach(b => {
+    b.classList.toggle('active', cumSelectedInstitutions.includes(b.textContent));
+  });
+  const allInstBtn = instSel.querySelector('.all-btn');
+  if (allInstBtn) allInstBtn.classList.toggle('active', cumSelectedInstitutions.length === appData.institutions.length);
+
+  const termSel = document.getElementById('cumTermSelector');
+  termSel.querySelectorAll('.filter-btn:not(.all-btn)').forEach(b => {
+    const val = b.textContent === '总计' ? '总' : b.textContent;
+    b.classList.toggle('active', cumSelectedTerms.includes(val));
+  });
+  const allTermBtn = termSel.querySelector('.all-btn');
+  if (allTermBtn) allTermBtn.classList.toggle('active', cumSelectedTerms.length === appData.positions.length);
+}
+
+function renderCumCharts(data) {
+  cumChartInstances.forEach(c => c.dispose());
+  cumChartInstances = [];
+  const grid = document.getElementById('cumChartsGrid');
+  grid.innerHTML = '';
+
+  // Get institution index mapping
+  const allInst = data.institutions;
+  const instIndices = cumSelectedInstitutions.map(name => allInst.indexOf(name)).filter(i => i >= 0);
+  if (instIndices.length === 0) return;
+
+  // Determine terms to sum
+  const allTerms = Object.keys(data.raw_table[Object.keys(data.raw_table)[0]].terms);
+  const termsToSum = cumSelectedTerms.includes('总') ? allTerms : cumSelectedTerms.filter(t => t !== '总');
+  if (termsToSum.length === 0 && !cumSelectedTerms.includes('总')) return;
+
+  const xAxisDates = data.dates; // 2025 trading days (mm-dd)
+  const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+  const chartsToShow = [];
+
+  // For each combination: bondType × term × institution
+  for (const bondType of cumSelectedBonds) {
+    const rawBond = data.raw_table[bondType];
+    if (!rawBond) continue;
+    for (const term of cumSelectedTerms) {
+      const actualTerms = (term === '总') ? allTerms : [term];
+      for (const inst of cumSelectedInstitutions) {
+        const instIdx = allInst.indexOf(inst);
+        if (instIdx < 0) continue;
+
+        // Build cumulative series for each year
+        const yearSeries = {};
+        for (const year of years) {
+          const yearPrefix = String(year) + '-';
+          // Collect daily values for this year, summing across selected terms
+          const dailyEntries = []; // [{mmdd, value}]
+          for (let i = 0; i < rawBond.dates.length; i++) {
+            const d = rawBond.dates[i];
+            if (!d.startsWith(yearPrefix)) continue;
+            const mmdd = d.substring(5);
+            let val = 0;
+            for (const t of actualTerms) {
+              const termData = rawBond.terms[t];
+              if (termData && termData[i]) val += (termData[i][instIdx] || 0);
+            }
+            dailyEntries.push({ mmdd, val });
+          }
+          if (dailyEntries.length === 0) continue;
+
+          // Compute cumulative sum
+          let cumSum = 0;
+          const cumMap = {}; // mmdd -> cumulative value
+          for (const entry of dailyEntries) {
+            cumSum += entry.val;
+            cumMap[entry.mmdd] = Math.round(cumSum * 100) / 100;
+          }
+
+          // Map to x-axis (2025 trading days)
+          const seriesData = xAxisDates.map(mmdd => cumMap[mmdd] !== undefined ? cumMap[mmdd] : null);
+          yearSeries[String(year)] = seriesData;
+        }
+
+        const periodLabel = term === '总' ? '全部期限' : term;
+        chartsToShow.push({
+          title: `${bondType} · ${periodLabel} · ${inst}`,
+          yearSeries
+        });
+      }
+    }
+  }
+
+  if (chartsToShow.length === 0) {
+    grid.innerHTML = '<div style="text-align:center;padding:60px;color:#999;grid-column:1/-1;">请选择至少一个债券类型、机构类型和剩余期限</div>';
+    document.getElementById('cumChartCount').textContent = '';
+    return;
+  }
+
+  document.getElementById('cumChartCount').textContent =
+    `已选 ${cumSelectedBonds.length} 种债券 × ${cumSelectedInstitutions.length} 个机构 × ${cumSelectedTerms.length} 个期限 = ${chartsToShow.length} 张图表`;
+
+  chartsToShow.forEach((chart, idx) => {
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.innerHTML = `<h3>${chart.title} · 累计净买入季节性</h3><div class="chart-container" id="cumchart-${idx}"></div>`;
+    grid.appendChild(card);
+  });
+
+  setTimeout(() => {
+    chartsToShow.forEach((chart, idx) => {
+      const el = document.getElementById('cumchart-' + idx);
+      if (!el) return;
+      const inst = echarts.init(el);
+      cumChartInstances.push(inst);
+
+      const series = [];
+      const legendData = [];
+      const yearList = Object.keys(chart.yearSeries).sort();
+
+      yearList.forEach(year => {
+        legendData.push(year);
+        series.push({
+          name: year, type: 'line', data: chart.yearSeries[year],
+          symbol: 'none', connectNulls: true,
+          lineStyle: { width: yearWidths[year] || 1.5, color: yearColors[year] || '#999' },
+          itemStyle: { color: yearColors[year] || '#999' },
+          emphasis: { lineStyle: { width: 3 } }
+        });
+      });
+
+      inst.setOption({
+        tooltip: {
+          trigger: 'axis', backgroundColor: 'rgba(30,30,50,0.92)',
+          borderColor: 'transparent', textStyle: { color: '#fff', fontSize: 12 },
+          formatter(params) {
+            let h = `<b style="color:#ddd">${params[0].axisValue}</b><br/>`;
+            params.forEach(p => {
+              if (p.value != null) h += `${p.marker} ${p.seriesName}: <b>${p.value.toLocaleString()}</b> 亿<br/>`;
+            });
+            return h;
+          }
+        },
+        legend: {
+          data: legendData, bottom: 0,
+          textStyle: { fontSize: 11 }, itemWidth: 20, itemHeight: 3,
+          itemStyle: { borderWidth: 0 }, selectedMode: true
+        },
+        grid: { left: 60, right: 20, top: 12, bottom: 42 },
+        xAxis: {
+          type: 'category', data: xAxisDates, boundaryGap: false,
+          axisLabel: { interval: Math.floor(xAxisDates.length / 12), fontSize: 10, color: '#aaa', rotate: 0 },
+          axisLine: { lineStyle: { color: '#e0e0e0' } }, axisTick: { show: false }
+        },
+        yAxis: {
+          type: 'value', name: '亿元',
+          axisLabel: { fontSize: 10, color: '#aaa', formatter: v => v >= 10000 || v <= -10000 ? (v/10000).toFixed(1) + '万' : v.toFixed(0) },
           splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } },
           axisLine: { show: false }
         },
