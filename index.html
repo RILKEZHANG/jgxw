@@ -190,7 +190,6 @@
         <div class="filter-row" id="tsBondSelector"></div>
         <div class="filter-row" id="tsTermSelector"></div>
         <div style="margin-top:12px;">
-          <button class="date-apply-btn" onclick="renderTimeSeries()">生成图表</button>
           <span class="date-hint" id="tsHint"></span>
         </div>
       </div>
@@ -248,6 +247,7 @@ fetch('data.json?v=' + Date.now()).then(r=>r.json()).then(data=>{
   renderFilterPanel(data);
   renderCharts(data);
   initTimeSeriesPanel(data);
+  renderTimeSeries();
 }).catch(err=>{
   document.querySelector('.content').innerHTML = '<div style="text-align:center;padding:80px;color:#999;font-size:16px;">数据加载失败，请确保 data.json 文件存在<br><small>'+err.message+'</small></div>';
 });
@@ -817,6 +817,10 @@ function initTimeSeriesPanel(data) {
   document.getElementById('tsEndDate').min = data.all_dates[0];
   document.getElementById('tsEndDate').max = data.all_dates[data.all_dates.length - 1];
 
+  // Auto-render on date change
+  document.getElementById('tsStartDate').addEventListener('change', renderTimeSeries);
+  document.getElementById('tsEndDate').addEventListener('change', renderTimeSeries);
+
   // Bond type selector (use bond_types which includes 利率债 computed on frontend)
   tsSelectedBonds = [data.bond_types[0]];
   const bondSel = document.getElementById('tsBondSelector');
@@ -834,6 +838,7 @@ function initTimeSeriesPanel(data) {
       bondSel.querySelectorAll('.filter-btn').forEach(b => {
         b.classList.toggle('active', tsSelectedBonds.includes(b.textContent));
       });
+      renderTimeSeries();
     };
     bondSel.appendChild(btn);
   });
@@ -856,6 +861,7 @@ function initTimeSeriesPanel(data) {
       termSel.querySelectorAll('.filter-btn').forEach(b => {
         b.classList.toggle('active', tsSelectedTerms.includes(b.textContent));
       });
+      renderTimeSeries();
     };
     termSel.appendChild(btn);
   });
