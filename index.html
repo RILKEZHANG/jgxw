@@ -806,7 +806,7 @@ let tsChartInstances = [];
 let tsSelectedBonds = [];
 let tsSelectedTerms = [];
 
-const instColors = ['#1890ff','#52c41a','#fa8c16','#722ed1','#13c2c2','#eb2f96','#faad14','#2f54eb'];
+const instColors = ['#5b8ff9','#5ad8a6','#f6bd16','#6dc8ec','#9270ca','#ff9d4d','#e8684a','#789262'];
 
 function initTimeSeriesPanel(data) {
   // Date pickers
@@ -1045,11 +1045,11 @@ function renderTimeSeries() {
             textStyle: { fontSize: 11 }, itemWidth: 16, itemHeight: 10,
             itemStyle: { borderWidth: 0 }, selectedMode: true
           },
-          grid: { left: 60, right: 20, top: 40, bottom: 40 },
+          grid: { left: 60, right: 20, top: 40, bottom: 65 },
           xAxis: {
             type: 'category', data: fc.dates, boundaryGap: true,
             axisLabel: {
-              interval: Math.max(0, Math.floor(fc.dates.length / 15)),
+              interval: fc.key === 'daily' ? Math.max(0, Math.floor(fc.dates.length / 20)) : Math.max(0, Math.floor(fc.dates.length / 12)),
               fontSize: 10, color: '#aaa', rotate: fc.key === 'daily' ? 45 : 0
             },
             axisLine: { lineStyle: { color: '#e0e0e0' } }, axisTick: { show: false }
@@ -1060,7 +1060,7 @@ function renderTimeSeries() {
             splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } },
             axisLine: { show: false }
           },
-          dataZoom: [{ type: 'inside' }, { type: 'slider', height: 20, bottom: 5 }],
+          dataZoom: [{ type: 'inside' }, { type: 'slider', height: 20, bottom: 8 }],
           series
         });
       }, 50);
