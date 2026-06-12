@@ -1002,7 +1002,7 @@ function renderCumCharts(data) {
   chartsToShow.forEach((chart, idx) => {
     const card = document.createElement('div');
     card.className = 'chart-card';
-    card.innerHTML = `<h3>${chart.title} · 累计净买入季节性</h3><div class="chart-container" id="cumchart-${idx}"></div>`;
+    card.innerHTML = `<h3>${chart.title}</h3><div class="chart-container" id="cumchart-${idx}"></div>`;
     grid.appendChild(card);
   });
 
