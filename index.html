@@ -132,6 +132,14 @@
       font-size: 15px; color: #333; margin-bottom: 12px;
       padding-left: 10px; border-left: 4px solid #1890ff;
     }
+    .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .chart-header h3 { margin-bottom: 0; }
+    .download-btn {
+      font-size: 12px; color: #1890ff; cursor: pointer; white-space: nowrap;
+      padding: 4px 10px; border: 1px solid #d9d9d9; border-radius: 6px;
+      background: #fafafa; transition: all 0.2s; text-decoration: none;
+    }
+    .download-btn:hover { background: #e6f7ff; border-color: #1890ff; }
     .chart-container { width: 100%; height: 380px; }
     .mma-toggle {
       display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 14px;
@@ -227,6 +235,11 @@ let selectedBondTypes = [];
 let selectedPeriods = ['超长'];
 let selectedInstitutions = [];
 let show10MMA = true;
+
+// Chart data stores for download functionality (keyed lookup maps)
+const _seasonalChartData = new Map();
+const _cumChartData = new Map();
+const _tsChartData = new Map();
 
 fetch('data.json?v=' + Date.now()).then(r=>r.json()).then(data=>{
   appData = data;
@@ -699,9 +712,88 @@ function compute10MMA(data) {
   return result;
 }
 
+function downloadChartCSV(filename, headers, rows) {
+  const BOM = '\uFEFF';
+  let csv = BOM + headers.join(',') + '\n';
+  rows.forEach(row => {
+    csv += row.map(v => v === null || v === undefined ? '' : v).join(',') + '\n';
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}
+
+function downloadSeasonalCSV(title, xAxisDates, seriesData, is10DMA) {
+  const years = seriesData.map(s => s.name);
+  const headers = ['\u65e5\u671f'].concat(years);
+  let dataArrays = seriesData.map(s => is10DMA ? compute10MMA(s.data) : s.data);
+  const rows = [];
+  for (let i = 0; i < xAxisDates.length; i++) {
+    const row = [xAxisDates[i]];
+    for (let j = 0; j < dataArrays.length; j++) {
+      row.push(dataArrays[j][i]);
+    }
+    rows.push(row);
+  }
+  const safeName = title.replace(/[\u00b7\s]+/g, '_');
+  downloadChartCSV(safeName + '.csv', headers, rows);
+}
+
+function downloadCumCSV(title, xAxisDates, yearSeries) {
+  const years = Object.keys(yearSeries).sort();
+  const headers = ['\u65e5\u671f'].concat(years);
+  const rows = [];
+  for (let i = 0; i < xAxisDates.length; i++) {
+    const row = [xAxisDates[i]];
+    for (const year of years) {
+      row.push(yearSeries[year][i]);
+    }
+    rows.push(row);
+  }
+  const safeName = title.replace(/[\u00b7\s]+/g, '_');
+  downloadChartCSV(safeName + '.csv', headers, rows);
+}
+
+function downloadTsCSV(title, dates, instNames, data) {
+  const headers = ['\u65e5\u671f'].concat(instNames);
+  const rows = [];
+  for (const d of dates) {
+    const row = [d];
+    const rowData = data[d];
+    for (let j = 0; j < instNames.length; j++) {
+      row.push(rowData ? Math.round((rowData[j] || 0) * 100) / 100 : 0);
+    }
+    rows.push(row);
+  }
+  const safeName = title.replace(/[\u00b7\s]+/g, '_');
+  downloadChartCSV(safeName + '.csv', headers, rows);
+}
+
+function downloadSeasonalByKey(key) {
+  const entry = _seasonalChartData.get(key);
+  if (!entry) return;
+  downloadSeasonalCSV(entry.title, appData.dates, entry.series, show10MMA);
+}
+function downloadCumByKey(key) {
+  const entry = _cumChartData.get(key);
+  if (!entry) return;
+  downloadCumCSV(entry.title, appData.dates, entry.yearSeries);
+}
+function downloadTsByKey(key) {
+  const entry = _tsChartData.get(key);
+  if (!entry) return;
+  downloadTsCSV(entry.title, entry.dates, entry.instNames, entry.data);
+}
+
 function renderCharts(data) {
   chartInstances.forEach(c => c.dispose());
   chartInstances = [];
+  _seasonalChartData.clear();
 
   const grid = document.getElementById('chartsGrid');
   grid.innerHTML = '';
@@ -735,7 +827,10 @@ function renderCharts(data) {
     card.className = 'chart-card';
     const periodLabel = chart.period === '总' ? '全部期限' : chart.period;
     const titleSuffix = show10MMA ? ' · 10DMA' : '';
-    card.innerHTML = `<h3>${chart.bond_type} · ${periodLabel} · ${chart.institution}${titleSuffix}</h3><div class="chart-container" id="chart-${idx}"></div>`;
+    const fullTitle = `${chart.bond_type} · ${periodLabel} · ${chart.institution}${titleSuffix}`;
+    const dlKey = `seasonal-${idx}`;
+    _seasonalChartData.set(dlKey, { title: fullTitle, series: chart.series });
+    card.innerHTML = `<div class="chart-header"><h3>${fullTitle}</h3><a class="download-btn" onclick="downloadSeasonalByKey('${dlKey}')">下载底稿</a></div><div class="chart-container" id="chart-${idx}"></div>`;
     grid.appendChild(card);
   });
 
@@ -922,6 +1017,7 @@ function cumUpdateFilterUI() {
 function renderCumCharts(data) {
   cumChartInstances.forEach(c => c.dispose());
   cumChartInstances = [];
+  _cumChartData.clear();
   const grid = document.getElementById('cumChartsGrid');
   grid.innerHTML = '';
 
@@ -1002,7 +1098,9 @@ function renderCumCharts(data) {
   chartsToShow.forEach((chart, idx) => {
     const card = document.createElement('div');
     card.className = 'chart-card';
-    card.innerHTML = `<h3>${chart.title}</h3><div class="chart-container" id="cumchart-${idx}"></div>`;
+    const dlKey = `cum-${idx}`;
+    _cumChartData.set(dlKey, { title: chart.title, yearSeries: chart.yearSeries });
+    card.innerHTML = `<div class="chart-header"><h3>${chart.title}</h3><a class="download-btn" onclick="downloadCumByKey('${dlKey}')">下载底稿</a></div><div class="chart-container" id="cumchart-${idx}"></div>`;
     grid.appendChild(card);
   });
 
@@ -1188,6 +1286,7 @@ function renderTimeSeries() {
   // Destroy old charts
   tsChartInstances.forEach(c => c.dispose());
   tsChartInstances = [];
+  _tsChartData.clear();
 
   const area = document.getElementById('tsChartsArea');
   area.innerHTML = '';
@@ -1289,7 +1388,11 @@ function renderTimeSeries() {
       card.className = 'chart-card';
       card.style.marginBottom = '20px';
       const chartId = 'ts-chart-' + term + '-' + fc.key;
-      card.innerHTML = '<h3>' + bondLabel + ' · ' + termLabel + ' · ' + fc.label + '</h3>' +
+      const tsTitle = bondLabel + ' · ' + termLabel + ' · ' + fc.label;
+      const tsKey = 'ts-' + term + '-' + fc.key;
+      _tsChartData.set(tsKey, { title: tsTitle, dates: fc.dates, instNames: instNames, data: fc.data });
+      card.innerHTML = '<div class="chart-header"><h3>' + tsTitle + '</h3>' +
+        '<a class="download-btn" onclick="downloadTsByKey(\'' + tsKey + '\')">下载底稿</a></div>' +
         '<div class="chart-container" id="' + chartId + '" style="height:420px;"></div>';
       area.appendChild(card);
 
