@@ -830,7 +830,7 @@ function renderCharts(data) {
     const fullTitle = `${chart.bond_type} · ${periodLabel} · ${chart.institution}${titleSuffix}`;
     const dlKey = `seasonal-${idx}`;
     _seasonalChartData.set(dlKey, { title: fullTitle, series: chart.series });
-    card.innerHTML = `<div class="chart-header"><h3>${fullTitle}</h3><a class="download-btn" onclick="downloadSeasonalByKey('${dlKey}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div><div class="chart-container" id="chart-${idx}"></div>`;
+    card.innerHTML = `<div class="chart-header"><h3>${fullTitle}</h3><a class="download-btn" title="下载底稿" onclick="downloadSeasonalByKey('${dlKey}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div><div class="chart-container" id="chart-${idx}"></div>`;
     grid.appendChild(card);
   });
 
@@ -1100,7 +1100,7 @@ function renderCumCharts(data) {
     card.className = 'chart-card';
     const dlKey = `cum-${idx}`;
     _cumChartData.set(dlKey, { title: chart.title, yearSeries: chart.yearSeries });
-    card.innerHTML = `<div class="chart-header"><h3>${chart.title}</h3><a class="download-btn" onclick="downloadCumByKey('${dlKey}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div><div class="chart-container" id="cumchart-${idx}"></div>`;
+    card.innerHTML = `<div class="chart-header"><h3>${chart.title}</h3><a class="download-btn" title="下载底稿" onclick="downloadCumByKey('${dlKey}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div><div class="chart-container" id="cumchart-${idx}"></div>`;
     grid.appendChild(card);
   });
 
@@ -1392,7 +1392,7 @@ function renderTimeSeries() {
       const tsKey = 'ts-' + term + '-' + fc.key;
       _tsChartData.set(tsKey, { title: tsTitle, dates: fc.dates, instNames: instNames, data: fc.data });
       card.innerHTML = '<div class="chart-header"><h3>' + tsTitle + '</h3>' +
-        '<a class="download-btn" onclick="downloadTsByKey(\'' + tsKey + '\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>' +
+        '<a class="download-btn" title="下载底稿" onclick="downloadTsByKey(\'' + tsKey + '\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>' +
         '<div class="chart-container" id="' + chartId + '" style="height:420px;"></div>';
       area.appendChild(card);
 
