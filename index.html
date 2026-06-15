@@ -162,9 +162,9 @@
     <div class="subtitle">数据来源：CFETS</div>
   </div>
   <div class="nav-tabs">
-    <div class="nav-tab active" data-tab="table" onclick="switchTab('table', this)">分期限统计</div>
-    <div class="nav-tab" data-tab="charts" onclick="switchTab('charts', this)">机构净买入季节性图表</div>
-    <div class="nav-tab" data-tab="cumcharts" onclick="switchTab('cumcharts', this)">机构累计净买入季节性图表</div>
+    <div class="nav-tab active" data-tab="table" onclick="switchTab('table', this)">分期限统计表</div>
+    <div class="nav-tab" data-tab="charts" onclick="switchTab('charts', this)">机构净买入（季节性）</div>
+    <div class="nav-tab" data-tab="cumcharts" onclick="switchTab('cumcharts', this)">机构累计净买入（季节性）</div>
     <div class="nav-tab" data-tab="timeseries" onclick="switchTab('timeseries', this)">时间序列</div>
   </div>
   <div class="content">
@@ -179,7 +179,7 @@
       </div>
       <div class="table-card">
         <div class="chart-header">
-          <h2>分期限统计（净买入，亿元）</h2>
+          <h2>分期限统计表（净买入，亿元）</h2>
           <a class="download-btn" title="下载图表" onclick="downloadTableImage()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
         </div>
         <div style="overflow-x:auto;"><table class="data-table" id="dataTable"></table></div>
@@ -722,7 +722,7 @@ function downloadTableImage() {
   if (!tableCard) return;
   html2canvas(tableCard, { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(canvas => {
     const link = document.createElement('a');
-    link.download = '分期限统计.png';
+    link.download = '分期限统计表.png';
     link.href = canvas.toDataURL('image/png');
     document.body.appendChild(link);
     link.click();
